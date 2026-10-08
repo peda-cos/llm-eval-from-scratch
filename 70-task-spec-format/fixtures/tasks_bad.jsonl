@@ -1,0 +1,17 @@
+{"task_id":"bad_seed","category":"arithmetic","prompt":"Question: 1 + 1\nAnswer:","targets":["2"],"metric_name":"exact_match","post_process":"strip_whitespace"}
+{"task_id":"bad_seed","category":"arithmetic","prompt":"Question: 1 + 1\nAnswer:","targets":["2"],"metric_name":"exact_match","post_process":"strip_whitespace"}
+{"task_id": "broken",
+[1, 2, 3]
+{"task_id":"bad_missing","category":"arithmetic","targets":["4"],"metric_name":"exact_match","post_process":"strip_whitespace"}
+{"task_id":"bad_unknown","category":"arithmetic","prompt":"Question: 2 + 2\nAnswer:","targets":["4"],"metric_name":"exact_match","post_process":"strip_whitespace","temperature":0.2}
+{"task_id":"bad id","category":"arithmetic","prompt":"Question: 2 + 2\nAnswer:","targets":["4"],"metric_name":"exact_match","post_process":"strip_whitespace"}
+{"task_id":"bad_category","category":"math","prompt":"Question: 2 + 2\nAnswer:","targets":["4"],"metric_name":"exact_match","post_process":"strip_whitespace"}
+{"task_id":"bad_prompt","category":"arithmetic","prompt":"","targets":["4"],"metric_name":"exact_match","post_process":"strip_whitespace"}
+{"task_id":"bad_targets","category":"arithmetic","prompt":"Question: 2 + 2\nAnswer:","targets":[],"metric_name":"exact_match","post_process":"strip_whitespace"}
+{"task_id":"bad_metric","category":"arithmetic","prompt":"Question: 2 + 2\nAnswer:","targets":["4"],"metric_name":"exact_match_v2","post_process":"strip_whitespace"}
+{"task_id":"bad_post","category":"arithmetic","prompt":"Question: 2 + 2\nAnswer:","targets":["4"],"metric_name":"exact_match","post_process":"strip_whitespace+lower"}
+{"task_id":"bad_few_shot","category":"arithmetic","prompt":"Question: 2 + 2\nAnswer:","targets":["4"],"metric_name":"exact_match","post_process":"strip_whitespace","few_shot_examples":[{"prompt":"Question: 1 + 1\nAnswer:","completion":"2"},{"prompt":"Question: 1 + 1\nAnswer:","completion":"2"},{"prompt":"Question: 1 + 1\nAnswer:","completion":"2"},{"prompt":"Question: 1 + 1\nAnswer:","completion":"2"},{"prompt":"Question: 1 + 1\nAnswer:","completion":"2"},{"prompt":"Question: 1 + 1\nAnswer:","completion":"2"},{"prompt":"Question: 1 + 1\nAnswer:","completion":"2"},{"prompt":"Question: 1 + 1\nAnswer:","completion":"2"},{"prompt":"Question: 1 + 1\nAnswer:","completion":"2"}]}
+{"task_id":"bad_metadata","category":"arithmetic","prompt":"Question: 2 + 2\nAnswer:","targets":["4"],"metric_name":"exact_match","post_process":"strip_whitespace","metadata":[]}
+{"task_id":"bad_code_metric","category":"code_exec","prompt":"Return a fenced code block.","targets":["assert True"],"metric_name":"exact_match","post_process":"extract_code_block"}
+{"task_id":"bad_mcq_post","category":"mcq","prompt":"Pick one.\nA. one\nB. two\nAnswer with one letter.","targets":["A"],"metric_name":"exact_match","post_process":"lower"}
+{"task_id":"bad_mcq_targets","category":"mcq","prompt":"Pick one.\nA. one\nB. two\nAnswer with one letter.","targets":["A","B"],"metric_name":"exact_match","post_process":"extract_letter"}
