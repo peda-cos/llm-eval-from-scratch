@@ -81,3 +81,29 @@ def bleu4(prediction: str, reference: str) -> float:
     return brevity_penalty * math.exp(
         sum(log_precisions) / len(log_precisions)
     )
+
+
+def lcs_length(a: Sequence[str], b: Sequence[str]) -> int:
+    """Return the longest common subsequence length via dynamic programming."""
+    dp = [[0] * (len(b) + 1) for _ in range(len(a) + 1)]
+    for i in range(1, len(a) + 1):
+        for j in range(1, len(b) + 1):
+            if a[i - 1] == b[j - 1]:
+                dp[i][j] = dp[i - 1][j - 1] + 1
+            else:
+                dp[i][j] = max(dp[i - 1][j], dp[i][j - 1])
+    return dp[-1][-1]
+
+
+def rouge_l(prediction: str, reference: str) -> float:
+    """Token-level ROUGE-L using the symmetric LCS F1 (beta = 1)."""
+    prediction_tokens = tokenize(prediction)
+    reference_tokens = tokenize(reference)
+    if not prediction_tokens or not reference_tokens:
+        return float(prediction_tokens == reference_tokens)
+    lcs = lcs_length(prediction_tokens, reference_tokens)
+    if lcs == 0:
+        return 0.0
+    precision = lcs / len(prediction_tokens)
+    recall = lcs / len(reference_tokens)
+    return 2 * precision * recall / (precision + recall)
