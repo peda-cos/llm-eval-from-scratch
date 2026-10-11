@@ -1,0 +1,24 @@
+[project]
+name = "classical-metrics"
+version = "0.1.0"
+description = "Five classical text metrics implemented from first principles"
+requires-python = ">=3.11"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "mypy==2.4.1",
+    "pytest==9.2.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["main.py"]
