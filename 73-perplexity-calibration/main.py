@@ -10,6 +10,7 @@ validates and aggregates the numbers.
 from __future__ import annotations
 
 import math
+import operator
 from dataclasses import dataclass
 
 import numpy as np
@@ -17,6 +18,7 @@ from numpy.typing import ArrayLike, NDArray
 
 FloatArray = NDArray[np.float64]
 IntArray = NDArray[np.int64]
+ReliabilityData = tuple[FloatArray, FloatArray, IntArray]
 
 
 def _float_vector(values: ArrayLike, name: str) -> FloatArray:
@@ -107,3 +109,138 @@ def perplexity(neg_log_probs: ArrayLike, token_counts: ArrayLike) -> float:
     instead of ``-log p`` would produce a perplexity below one.
     """
     return PerplexityResult.from_token_nll(neg_log_probs, token_counts).perplexity
+
+
+def _calibration_vectors(
+    confidences: ArrayLike, correct: ArrayLike
+) -> tuple[FloatArray, FloatArray]:
+    """Validate one confidence and one binary correctness value per prediction."""
+    p = _float_vector(confidences, "confidences")
+    y = _float_vector(correct, "correct")
+    if p.size != y.size:
+        raise ValueError("confidences and correct must have the same length")
+    if not bool(np.all(np.isfinite(p))):
+        raise ValueError("confidences must be finite")
+    if bool(np.any((p < 0.0) | (p > 1.0))):
+        raise ValueError("confidences must lie in [0, 1]")
+    if not bool(np.all((y == 0.0) | (y == 1.0))):
+        raise ValueError("correct entries must be 0 or 1")
+    return p, y
+
+
+def _validated_bins(bins: int) -> int:
+    """Accept any positive integer-like bin count; reject bool and floats."""
+    if isinstance(bins, bool):
+        raise ValueError("bins must be a positive integer")
+    try:
+        value = operator.index(bins)
+    except TypeError as exc:
+        raise ValueError("bins must be a positive integer") from exc
+    if value < 1:
+        raise ValueError("bins must be a positive integer")
+    return value
+
+
+def _reliability_from_arrays(
+    p: FloatArray, y: FloatArray, bins: int
+) -> ReliabilityData:
+    """Compute per-bin confidence, accuracy, and count without empty-bin warnings."""
+    indices = np.minimum((p * bins).astype(np.int64), bins - 1)
+    counts = np.bincount(indices, minlength=bins)
+    confidence_sums = np.bincount(indices, weights=p, minlength=bins)
+    correct_sums = np.bincount(indices, weights=y, minlength=bins)
+    mean_confidence = np.zeros(bins, dtype=np.float64)
+    mean_accuracy = np.zeros(bins, dtype=np.float64)
+    populated = counts > 0
+    np.divide(confidence_sums, counts, out=mean_confidence, where=populated)
+    np.divide(correct_sums, counts, out=mean_accuracy, where=populated)
+    return mean_confidence, mean_accuracy, counts.astype(np.int64)
+
+
+def _ece_from_arrays(p: FloatArray, y: FloatArray, bins: int) -> float:
+    if p.size == 0:
+        return 0.0
+    mean_confidence, mean_accuracy, counts = _reliability_from_arrays(p, y, bins)
+    populated = counts > 0
+    weights = counts[populated].astype(np.float64) / float(p.size)
+    gaps = np.abs(mean_accuracy[populated] - mean_confidence[populated])
+    return float(np.sum(weights * gaps))
+
+
+def expected_calibration_error(
+    confidences: ArrayLike, correct: ArrayLike, bins: int = 10
+) -> float:
+    """Return the count-weighted mean confidence/accuracy gap over equal-width bins.
+
+    Confidence and correctness must be one value per prediction. Empty input is
+    ``0.0``; use :class:`CalibrationReport` when the populated-bin count matters.
+    """
+    p, y = _calibration_vectors(confidences, correct)
+    return _ece_from_arrays(p, y, _validated_bins(bins))
+
+
+def brier_score(confidences: ArrayLike, correct: ArrayLike) -> float:
+    """Return the mean squared error between confidence and binary outcome."""
+    p, y = _calibration_vectors(confidences, correct)
+    if p.size == 0:
+        return 0.0
+    return float(np.mean(np.square(p - y)))
+
+
+def reliability_diagram(
+    confidences: ArrayLike, correct: ArrayLike, bins: int = 10
+) -> ReliabilityData:
+    """Return per-bin mean confidence, mean accuracy, and count.
+
+    Unpopulated bins have zero mean confidence, zero mean accuracy, and count
+    zero; plotting code should mask on ``counts > 0``. Empty input returns
+    zero-filled arrays of length ``bins``.
+    """
+    p, y = _calibration_vectors(confidences, correct)
+    return _reliability_from_arrays(p, y, _validated_bins(bins))
+
+
+@dataclass(frozen=True, slots=True)
+class BrierDecomposition:
+    """Murphy decomposition: brier = reliability - resolution + uncertainty."""
+
+    reliability: float
+    resolution: float
+    uncertainty: float
+    base_rate: float
+
+
+def _decomposition_from_arrays(p: FloatArray, y: FloatArray) -> BrierDecomposition:
+    if p.size == 0:
+        return BrierDecomposition(
+            reliability=0.0, resolution=0.0, uncertainty=0.0, base_rate=0.0
+        )
+    unique, inverse = np.unique(p, return_inverse=True)
+    counts = np.bincount(inverse, minlength=int(unique.size)).astype(np.float64)
+    accuracy = (
+        np.bincount(inverse, weights=y, minlength=int(unique.size)) / counts
+    )
+    base_rate = float(np.mean(y))
+    weights = counts / float(p.size)
+    reliability = float(np.sum(weights * np.square(unique - accuracy)))
+    resolution = float(np.sum(weights * np.square(accuracy - base_rate)))
+    uncertainty = base_rate * (1.0 - base_rate)
+    return BrierDecomposition(
+        reliability=reliability,
+        resolution=resolution,
+        uncertainty=uncertainty,
+        base_rate=base_rate,
+    )
+
+
+def brier_decomposition(
+    confidences: ArrayLike, correct: ArrayLike
+) -> BrierDecomposition:
+    """Return Murphy's reliability, resolution, and uncertainty terms.
+
+    Groups share an exact confidence value, not an equal-width ECE bin. Using a
+    bin's mean confidence would leave a within-bin variance term out of the
+    identity and make the decomposition disagree with the Brier score.
+    """
+    p, y = _calibration_vectors(confidences, correct)
+    return _decomposition_from_arrays(p, y)
