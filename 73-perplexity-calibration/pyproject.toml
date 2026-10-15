@@ -1,0 +1,24 @@
+[project]
+name = "perplexity-calibration"
+version = "0.1.0"
+description = "Perplexity, ECE, Brier score, and reliability diagrams for an LLM eval harness"
+requires-python = ">=3.12"
+dependencies = ["numpy==2.5.5"]
+
+[dependency-groups]
+dev = [
+    "mypy==2.4.1",
+    "pytest==9.2.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["main.py"]
