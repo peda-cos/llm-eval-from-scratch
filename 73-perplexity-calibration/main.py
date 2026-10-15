@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import math
 import operator
+import sys
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -157,14 +159,22 @@ def _reliability_from_arrays(
     return mean_confidence, mean_accuracy, counts.astype(np.int64)
 
 
+def _ece_from_stats(
+    mean_confidence: FloatArray, mean_accuracy: FloatArray, counts: IntArray
+) -> float:
+    n = int(counts.sum())
+    if n == 0:
+        return 0.0
+    populated = counts > 0
+    weights = counts[populated].astype(np.float64) / float(n)
+    gaps = np.abs(mean_accuracy[populated] - mean_confidence[populated])
+    return float(np.sum(weights * gaps))
+
+
 def _ece_from_arrays(p: FloatArray, y: FloatArray, bins: int) -> float:
     if p.size == 0:
         return 0.0
-    mean_confidence, mean_accuracy, counts = _reliability_from_arrays(p, y, bins)
-    populated = counts > 0
-    weights = counts[populated].astype(np.float64) / float(p.size)
-    gaps = np.abs(mean_accuracy[populated] - mean_confidence[populated])
-    return float(np.sum(weights * gaps))
+    return _ece_from_stats(*_reliability_from_arrays(p, y, bins))
 
 
 def expected_calibration_error(
@@ -182,6 +192,10 @@ def expected_calibration_error(
 def brier_score(confidences: ArrayLike, correct: ArrayLike) -> float:
     """Return the mean squared error between confidence and binary outcome."""
     p, y = _calibration_vectors(confidences, correct)
+    return _brier_from_arrays(p, y)
+
+
+def _brier_from_arrays(p: FloatArray, y: FloatArray) -> float:
     if p.size == 0:
         return 0.0
     return float(np.mean(np.square(p - y)))
@@ -244,3 +258,163 @@ def brier_decomposition(
     """
     p, y = _calibration_vectors(confidences, correct)
     return _decomposition_from_arrays(p, y)
+
+
+@dataclass(frozen=True, slots=True)
+class CalibrationReport:
+    """One model's pooled calibration numbers and bin data."""
+
+    ece: float
+    brier: float
+    reliability: ReliabilityData
+    decomposition: BrierDecomposition
+    populated_bins: int
+    bins: int
+    n_samples: int
+
+    @classmethod
+    def from_predictions(
+        cls, confidences: ArrayLike, correct: ArrayLike, bins: int = 10
+    ) -> CalibrationReport:
+        """Pool all predictions into one report for a model."""
+        p, y = _calibration_vectors(confidences, correct)
+        validated_bins = _validated_bins(bins)
+        mean_confidence, mean_accuracy, counts = _reliability_from_arrays(
+            p, y, validated_bins
+        )
+        return cls(
+            ece=_ece_from_stats(mean_confidence, mean_accuracy, counts),
+            brier=_brier_from_arrays(p, y),
+            reliability=(mean_confidence, mean_accuracy, counts),
+            decomposition=_decomposition_from_arrays(p, y),
+            populated_bins=int(np.count_nonzero(counts)),
+            bins=validated_bins,
+            n_samples=int(p.size),
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        """Return a JSON-safe report body; non-finite values are not expected here."""
+        mean_confidence, mean_accuracy, counts = self.reliability
+        return {
+            "ece": float(self.ece),
+            "brier": float(self.brier),
+            "reliability": {
+                "mean_confidence": [float(value) for value in mean_confidence],
+                "mean_accuracy": [float(value) for value in mean_accuracy],
+                "counts": [int(value) for value in counts],
+            },
+            "decomposition": {
+                "reliability": float(self.decomposition.reliability),
+                "resolution": float(self.decomposition.resolution),
+                "uncertainty": float(self.decomposition.uncertainty),
+                "base_rate": float(self.decomposition.base_rate),
+            },
+            "populated_bins": int(self.populated_bins),
+            "bins": int(self.bins),
+            "n_samples": int(self.n_samples),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ModelReport:
+    """The runner-facing report: calibration plus held-out perplexity."""
+
+    model: str
+    calibration: CalibrationReport | None = None
+    perplexity: PerplexityResult | None = None
+
+    def metrics(self) -> dict[str, float]:
+        """Return exactly the scalars a leaderboard row needs."""
+        metrics: dict[str, float] = {}
+        if self.calibration is not None:
+            metrics["ece"] = self.calibration.ece
+            metrics["brier"] = self.calibration.brier
+        if self.perplexity is not None:
+            metrics["perplexity"] = self.perplexity.perplexity
+        return metrics
+
+    def to_dict(self) -> dict[str, object]:
+        """Serialize the full report; a zero-token perplexity remains ``nan``."""
+        calibration: dict[str, object] | None = None
+        if self.calibration is not None:
+            calibration = self.calibration.to_dict()
+        perplexity: dict[str, object] | None = None
+        if self.perplexity is not None:
+            perplexity = {
+                "perplexity": float(self.perplexity.perplexity),
+                "mean_nll": float(self.perplexity.mean_nll),
+                "total_nll": float(self.perplexity.total_nll),
+                "total_tokens": int(self.perplexity.total_tokens),
+            }
+        return {
+            "model": self.model,
+            "metrics": self.metrics(),
+            "calibration": calibration,
+            "perplexity": perplexity,
+        }
+
+
+def _well_calibrated_predictions() -> tuple[list[float], list[bool]]:
+    confidences: list[float] = []
+    correct: list[bool] = []
+    for hits in range(5, 100, 10):
+        confidence = hits / 100.0
+        confidences.extend([confidence] * 100)
+        correct.extend([True] * hits)
+        correct.extend([False] * (100 - hits))
+    return confidences, correct
+
+
+def _demo_reports() -> tuple[ModelReport, ...]:
+    held_out = PerplexityResult.from_token_nll([1.0] * 30, [7, 11, 12])
+    well_confidences, well_correct = _well_calibrated_predictions()
+    return tuple(
+        ModelReport(
+            model=name,
+            calibration=CalibrationReport.from_predictions(confidences, correct),
+            perplexity=held_out,
+        )
+        for name, confidences, correct in (
+            ("well_calibrated", well_confidences, well_correct),
+            ("overconfident", [0.9] * 100, [True] * 60 + [False] * 40),
+            ("underconfident", [0.6] * 100, [True] * 90 + [False] * 10),
+        )
+    )
+
+
+def _print_demo(reports: Sequence[ModelReport]) -> None:
+    for report in reports:
+        calibration = report.calibration
+        if calibration is None:
+            raise RuntimeError("demo reports must include calibration data")
+        terms = calibration.decomposition
+        print(
+            f"model={report.model} n={calibration.n_samples} "
+            f"ece={calibration.ece:.6f} brier={calibration.brier:.6f} "
+            f"populated_bins={calibration.populated_bins} "
+            f"reliability={terms.reliability:.6f} "
+            f"resolution={terms.resolution:.6f} "
+            f"uncertainty={terms.uncertainty:.6f}"
+        )
+    if not reports or reports[0].perplexity is None:
+        raise RuntimeError("demo reports must include a held-out perplexity")
+    held_out = reports[0].perplexity
+    print(
+        f"perplexity corpus=held_out_synthetic tokens={held_out.total_tokens} "
+        f"mean_nll={held_out.mean_nll:.6f} ppl={held_out.perplexity:.6f}"
+    )
+    print("demo: ok")
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run the deterministic synthetic demo."""
+    args = list(sys.argv[1:] if argv is None else argv)
+    if args and args != ["demo"]:
+        print("usage: python main.py [demo]", file=sys.stderr)
+        return 2
+    _print_demo(_demo_reports())
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
