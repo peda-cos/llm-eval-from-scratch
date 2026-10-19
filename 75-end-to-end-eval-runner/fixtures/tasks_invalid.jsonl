@@ -1,0 +1,3 @@
+{"task_id":"bad_unknown","category":"arithmetic","prompt":"Question: 1 + 1\nAnswer:","targets":["2"],"metric_name":"exact_match","post_process":"none","unexpected":true}
+{"task_id":"bad_metric","category":"arithmetic","prompt":"Question: 3 + 4\nAnswer:","targets":["7"],"metric_name":"f1","post_process":"none"}
+{"task_id":"bad_json","category":
