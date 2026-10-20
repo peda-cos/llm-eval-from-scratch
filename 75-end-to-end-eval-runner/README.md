@@ -187,10 +187,22 @@ results.
 | noisy | 0.930 | 0.865 | 1 | 10 |
 ```
 
-Observed wall time is roughly 0.1 seconds for 10 tasks × 3 models on this workstation, well under
+Observed wall time is 0.10–0.14 seconds for 10 tasks × 3 models in repeated local runs, well under
 the demo's ten-second budget. The test suite reports 43 passed tests and strict mypy reports no
 issues. The rule-based adapter is strictly above the noisy baseline; the demo gate also verifies
 that all 30 model/task results and all three calibration reports exist.
+
+Reproduce those numbers directly:
+
+```bash
+uv run python main.py demo --seed 7 --bootstrap 500 --json-out /tmp/eval-report.json
+uv run python main.py demo --no-parallel --seed 7 --bootstrap 500 --json-out /tmp/eval-seq.json
+```
+
+The parallel and sequential JSON files have identical per-task scores, leaderboard, pairwise
+intervals, and calibration blocks; only `summary.wall_seconds`, `summary.parallel`, and per-call
+`duration_ms` differ. The seed and bootstrap count are recorded in the envelope so the markdown
+table can be traced back to the run that produced it.
 
 The noisy mean is not exactly zero: its summary generation shares enough tokens with one BLEU-4
 reference to earn partial credit under add-one smoothing. It remains far below the biased and
@@ -211,7 +223,20 @@ rule-based adapters.
 The JSON envelope has `schema_version`, `status`, `summary`, `leaderboard`, `pairwise`,
 `calibration`, and per-task `results`. `EvalReport.to_json()` is strict JSON (`allow_nan=False`).
 On failure the CLI writes the same envelope shape with `status: "error"` and an `error` object
-carrying `stage`, `type`, `message`, and optional `details`.
+carrying `stage`, `type`, `message`, and optional `details`:
+
+```json
+{
+  "schema_version": 1,
+  "status": "error",
+  "error": {
+    "stage": "validate",
+    "type": "FixtureValidationError",
+    "message": "fixtures/tasks_invalid.jsonl: 3 invalid record(s); ...",
+    "details": [{"line": 1, "rule": "unknown_field", "field": "unexpected", "message": "..."}]
+  }
+}
+```
 
 ## Limitations
 
