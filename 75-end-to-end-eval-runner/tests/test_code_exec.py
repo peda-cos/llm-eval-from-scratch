@@ -73,6 +73,10 @@ def test_denied_import_and_empty_assertions_are_rejected() -> None:
     assert denied.exit_code == "error"
     assert "denied" in denied.detail
 
+    denied_system = run_candidate("import os\nos.system('echo hi')\n", ["assert True"])
+    assert denied_system.exit_code == "error"
+    assert "denied: os.system" in denied_system.detail
+
     with pytest.raises(ValueError, match="assertions"):
         run_candidate("x = 1", [])
     with pytest.raises(ValueError, match="assertions"):

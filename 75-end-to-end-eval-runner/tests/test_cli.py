@@ -74,6 +74,48 @@ def test_cli_invalid_fixture_writes_structured_error(tmp_path: Path) -> None:
     assert len(payload["error"]["details"]) == 3
 
 
+def test_cli_parallel_and_sequential_agree(tmp_path: Path) -> None:
+    sequential_path = tmp_path / "sequential.json"
+    parallel_path = tmp_path / "parallel.json"
+    sequential = _cli(
+        "demo",
+        "--no-parallel",
+        "--json-out",
+        str(sequential_path),
+        "--bootstrap",
+        "50",
+        "--seed",
+        "7",
+    )
+    parallel = _cli(
+        "demo",
+        "--json-out",
+        str(parallel_path),
+        "--bootstrap",
+        "50",
+        "--seed",
+        "7",
+    )
+    assert sequential.returncode == parallel.returncode == 0
+    first = json.loads(sequential_path.read_text(encoding="utf-8"))
+    second = json.loads(parallel_path.read_text(encoding="utf-8"))
+
+    first_results = [
+        (row["model_id"], row["task_id"], row["score"], row["correct"], row["prediction"])
+        for row in first["results"]
+    ]
+    second_results = [
+        (row["model_id"], row["task_id"], row["score"], row["correct"], row["prediction"])
+        for row in second["results"]
+    ]
+    assert first_results == second_results
+    assert first["leaderboard"] == second["leaderboard"]
+    assert first["pairwise"] == second["pairwise"]
+    assert first["calibration"] == second["calibration"]
+    assert first["summary"]["parallel"] is False
+    assert second["summary"]["parallel"] is True
+
+
 def test_cli_rejects_zero_workers_with_usage_error(tmp_path: Path) -> None:
     result = _cli(
         "demo",
