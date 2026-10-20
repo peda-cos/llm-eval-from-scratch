@@ -180,12 +180,16 @@ def _validated_runs(runs: Sequence[EvalRun]) -> list[EvalRun]:
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(f"{label} must not be empty")
         try:
+            if isinstance(run.score, bool) or not isinstance(run.score, (int, float)):
+                raise TypeError
             score = float(run.score)
         except (TypeError, ValueError) as exc:
             raise ValueError("score must be a finite number in [0, 1]") from exc
         if not math.isfinite(score) or not 0.0 <= score <= 1.0:
             raise ValueError(f"score must be finite and in [0, 1], got {run.score!r}")
         try:
+            if isinstance(run.weight, bool) or not isinstance(run.weight, (int, float)):
+                raise TypeError
             weight = float(run.weight)
         except (TypeError, ValueError) as exc:
             raise ValueError("weight must be a finite positive number") from exc

@@ -99,6 +99,8 @@ def test_aggregate_rejects_invalid_runs_and_empty_input() -> None:
         )
     with pytest.raises(ValueError, match="score"):
         aggregate([EvalRun("a", "t", "exact_match", 1.5)])
+    with pytest.raises(ValueError, match="score"):
+        aggregate([EvalRun("a", "t", "exact_match", "1.0")])  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="weight"):
         aggregate([EvalRun("a", "t", "exact_match", 1.0, weight=0.0)])
     with pytest.raises(ValueError, match="model_id"):
