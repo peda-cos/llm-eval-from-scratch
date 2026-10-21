@@ -200,9 +200,9 @@ uv run python main.py demo --no-parallel --seed 7 --bootstrap 500 --json-out /tm
 ```
 
 The parallel and sequential JSON files have identical per-task scores, leaderboard, pairwise
-intervals, and calibration blocks; only `summary.wall_seconds`, `summary.parallel`, and per-call
-`duration_ms` differ. The seed and bootstrap count are recorded in the envelope so the markdown
-table can be traced back to the run that produced it.
+intervals, and calibration blocks; only `summary.wall_seconds`, `summary.parallel`,
+`summary.workers`, and per-call `duration_ms` differ. The seed and bootstrap count are recorded
+in the envelope so the markdown table can be traced back to the run that produced it.
 
 The noisy mean is not exactly zero: its summary generation shares enough tokens with one BLEU-4
 reference to earn partial credit under add-one smoothing. It remains far below the biased and
