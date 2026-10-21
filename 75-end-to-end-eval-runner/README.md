@@ -187,7 +187,7 @@ results.
 | noisy | 0.930 | 0.865 | 1 | 10 |
 ```
 
-Observed wall time is 0.10–0.14 seconds for 10 tasks × 3 models in repeated local runs, well under
+Observed wall time is 0.09–0.14 seconds for 10 tasks × 3 models in repeated local runs, well under
 the demo's ten-second budget. The test suite reports 43 passed tests and strict mypy reports no
 issues. The rule-based adapter is strictly above the noisy baseline; the demo gate also verifies
 that all 30 model/task results and all three calibration reports exist.
